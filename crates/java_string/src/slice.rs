@@ -44,7 +44,7 @@ impl JavaStr {
     /// Converts `v` to a `&mut JavaStr` if it is fully-valid UTF-8, i.e. UTF-8
     /// without surrogate code points. See [`std::str::from_utf8_mut`].
     #[inline]
-    pub fn from_full_utf8_mut(v: &mut [u8]) -> Result<&mut JavaStr, Utf8Error> {
+    pub const fn from_full_utf8_mut(v: &mut [u8]) -> Result<&mut JavaStr, Utf8Error> {
         match std::str::from_utf8_mut(v) {
             Ok(str) => Ok(JavaStr::from_mut_str(str)),
             Err(err) => Err(Utf8Error::from_std(err)),
@@ -88,7 +88,7 @@ impl JavaStr {
     /// surrogate code points.
     #[inline]
     #[must_use]
-    pub unsafe fn from_semi_utf8_unchecked_mut(v: &mut [u8]) -> &mut JavaStr {
+    pub const unsafe fn from_semi_utf8_unchecked_mut(v: &mut [u8]) -> &mut JavaStr {
         // SAFETY: see from_semi_utf8_unchecked
         std::mem::transmute(v)
     }
@@ -104,7 +104,7 @@ impl JavaStr {
 
     #[inline]
     #[must_use]
-    pub fn from_mut_str(str: &mut str) -> &mut JavaStr {
+    pub const fn from_mut_str(str: &mut str) -> &mut JavaStr {
         unsafe {
             // SAFETY: the input str is guaranteed to have valid UTF-8.
             JavaStr::from_semi_utf8_unchecked_mut(str.as_bytes_mut())
@@ -142,14 +142,14 @@ impl JavaStr {
     /// surrogate pairs.
     #[inline]
     #[must_use]
-    pub unsafe fn as_bytes_mut(&mut self) -> &mut [u8] {
+    pub const unsafe fn as_bytes_mut(&mut self) -> &mut [u8] {
         &mut self.inner
     }
 
     /// See [`str::as_mut_ptr`].
     #[inline]
     #[must_use]
-    pub fn as_mut_ptr(&mut self) -> *mut u8 {
+    pub const fn as_mut_ptr(&mut self) -> *mut u8 {
         self.inner.as_mut_ptr()
     }
 
@@ -473,7 +473,7 @@ impl JavaStr {
     /// See [`str::is_char_boundary`].
     #[inline]
     #[must_use]
-    pub fn is_char_boundary(&self, index: usize) -> bool {
+    pub const fn is_char_boundary(&self, index: usize) -> bool {
         // 0 is always ok.
         // Test for 0 explicitly so that it can optimize out the check
         // easily and skip reading string data for that case.
@@ -482,20 +482,20 @@ impl JavaStr {
             return true;
         }
 
-        match self.as_bytes().get(index) {
-            // For `None` we have two options:
+        if index >= self.len() {
+            // For `true` we have two options:
             //
-            // - index == self.len() Empty strings are valid, so return true
-            // - index > self.len() In this case return false
+            // - index == self.len()
+            //   Empty strings are valid, so return true
+            // - index > self.len()
+            //   In this case return false
             //
             // The check is placed exactly here, because it improves generated
-            // code on higher opt-levels. See https://github.com/rust-lang/rust/pull/84751 for more details.
-            None => index == self.len(),
-
-            Some(&b) => {
-                // This is bit magic equivalent to: b < 128 || b >= 192
-                (b as i8) >= -0x40
-            }
+            // code on higher opt-levels. See PR https://github.com/rust-lang/rust/pull/84751 for more details.
+            index == self.len()
+        } else {
+            // This is bit magic equivalent to: b < 128 || b >= 192
+            (self.as_bytes()[index] as i8) >= -0x40
         }
     }
 
@@ -524,7 +524,7 @@ impl JavaStr {
     /// See [`str::len`].
     #[inline]
     #[must_use]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.inner.len()
     }
 
@@ -586,7 +586,7 @@ impl JavaStr {
     /// assert_eq!(v, [(0, JavaStr::from_str("aba"))]); // only the first `aba`
     /// ```
     #[inline]
-    pub fn match_indices<P>(&self, pat: P) -> MatchIndices<P>
+    pub fn match_indices<P>(&self, pat: P) -> MatchIndices<'_, P>
     where
         P: JavaStrPattern,
     {
@@ -626,7 +626,7 @@ impl JavaStr {
     /// );
     /// ```
     #[inline]
-    pub fn matches<P>(&self, pat: P) -> Matches<P>
+    pub fn matches<P>(&self, pat: P) -> Matches<'_, P>
     where
         P: JavaStrPattern,
     {
@@ -778,7 +778,7 @@ impl JavaStr {
     /// assert_eq!(v, [(2, JavaStr::from_str("aba"))]); // only the last `aba`
     /// ```
     #[inline]
-    pub fn rmatch_indices<P>(&self, pat: P) -> RMatchIndices<P>
+    pub fn rmatch_indices<P>(&self, pat: P) -> RMatchIndices<'_, P>
     where
         P: JavaStrPattern,
     {
@@ -816,7 +816,7 @@ impl JavaStr {
     /// );
     /// ```
     #[inline]
-    pub fn rmatches<P>(&self, pat: P) -> RMatches<P>
+    pub fn rmatches<P>(&self, pat: P) -> RMatches<'_, P>
     where
         P: JavaStrPattern,
     {
@@ -872,7 +872,7 @@ impl JavaStr {
     /// );
     /// ```
     #[inline]
-    pub fn rsplit<P>(&self, pat: P) -> RSplit<P>
+    pub fn rsplit<P>(&self, pat: P) -> RSplit<'_, P>
     where
         P: JavaStrPattern,
     {
@@ -941,7 +941,7 @@ impl JavaStr {
     /// );
     /// ```
     #[inline]
-    pub fn rsplit_terminator<P>(&self, pat: P) -> RSplitTerminator<P>
+    pub fn rsplit_terminator<P>(&self, pat: P) -> RSplitTerminator<'_, P>
     where
         P: JavaStrPattern,
     {
@@ -988,7 +988,7 @@ impl JavaStr {
     /// );
     /// ```
     #[inline]
-    pub fn rsplitn<P>(&self, n: usize, pat: P) -> RSplitN<P>
+    pub fn rsplitn<P>(&self, n: usize, pat: P) -> RSplitN<'_, P>
     where
         P: JavaStrPattern,
     {
@@ -1066,7 +1066,7 @@ impl JavaStr {
     /// );
     /// ```
     #[inline]
-    pub fn split<P>(&self, pat: P) -> Split<P>
+    pub fn split<P>(&self, pat: P) -> Split<'_, P>
     where
         P: JavaStrPattern,
     {
@@ -1160,20 +1160,101 @@ impl JavaStr {
     pub fn split_at_mut(&mut self, mid: usize) -> (&mut JavaStr, &mut JavaStr) {
         // is_char_boundary checks that the index is in [0, .len()]
         if self.is_char_boundary(mid) {
-            let len = self.len();
-            let ptr = self.as_mut_ptr();
             // SAFETY: just checked that `mid` is on a char boundary.
-            unsafe {
-                (
-                    JavaStr::from_semi_utf8_unchecked_mut(slice::from_raw_parts_mut(ptr, mid)),
-                    JavaStr::from_semi_utf8_unchecked_mut(slice::from_raw_parts_mut(
-                        ptr.add(mid),
-                        len - mid,
-                    )),
-                )
-            }
+            unsafe { self.split_at_mut_unchecked(mid) }
         } else {
             slice_error_fail(self, 0, mid)
+        }
+    }
+
+    /// See [`str::split_at_checked`].
+    ///
+    /// ```
+    /// # use java_string::JavaStr;
+    /// let s = JavaStr::from_str("Per Martin-Löf");
+    ///
+    /// let (first, last) = s.split_at_checked(3).unwrap();
+    /// assert_eq!("Per", first);
+    /// assert_eq!(" Martin-Löf", last);
+    ///
+    /// assert_eq!(None, s.split_at_checked(13));  // Inside “ö”
+    /// assert_eq!(None, s.split_at_checked(16));  // Beyond the string length
+    /// ```
+    #[inline]
+    #[must_use]
+    pub const fn split_at_checked(&self, mid: usize) -> Option<(&JavaStr, &JavaStr)> {
+        // is_char_boundary checks that the index is in [0, .len()]
+        if self.is_char_boundary(mid) {
+            // SAFETY: just checked that `mid` is on a char boundary.
+            unsafe { Some(self.split_at_unchecked(mid)) }
+        } else {
+            None
+        }
+    }
+
+    /// # Safety
+    ///
+    /// Caller must ensure that `mid` lies on a valid char boundary
+    #[inline]
+    const unsafe fn split_at_unchecked(&self, mid: usize) -> (&JavaStr, &JavaStr) {
+        let len = self.len();
+        let ptr = self.as_ptr();
+        // SAFETY: caller guarantees `mid` is on a char boundary.
+        unsafe {
+            (
+                Self::from_semi_utf8_unchecked(slice::from_raw_parts(ptr, mid)),
+                Self::from_semi_utf8_unchecked(slice::from_raw_parts(ptr.add(mid), len - mid)),
+            )
+        }
+    }
+
+    /// See [`str::split_at_mut_checked`].
+    ///
+    /// ```
+    /// # use java_string::{JavaStr, JavaString};
+    /// let mut s = JavaString::from("Per Martin-Löf");
+    /// let mut s = s.as_mut_java_str();
+    /// if let Some((first, last)) = s.split_at_mut_checked(3) {
+    ///     first.make_ascii_uppercase();
+    ///     assert_eq!("PER", first);
+    ///     assert_eq!(" Martin-Löf", last);
+    /// }
+    /// assert_eq!("PER Martin-Löf", s);
+    ///
+    /// assert_eq!(None, s.split_at_mut_checked(13));  // Inside “ö”
+    /// assert_eq!(None, s.split_at_mut_checked(16));  // Beyond the string length
+    /// ```
+    #[inline]
+    #[must_use]
+    pub const fn split_at_mut_checked(
+        &mut self,
+        mid: usize,
+    ) -> Option<(&mut JavaStr, &mut JavaStr)> {
+        // is_char_boundary checks that the index is in [0, .len()]
+        if self.is_char_boundary(mid) {
+            // SAFETY: just checked that `mid` is on a char boundary.
+            unsafe { Some(self.split_at_mut_unchecked(mid)) }
+        } else {
+            None
+        }
+    }
+
+    /// # Safety
+    ///
+    /// Caller must ensure that `mid` lies on a valid char boundary
+    #[inline]
+    const unsafe fn split_at_mut_unchecked(&mut self, mid: usize) -> (&mut JavaStr, &mut JavaStr) {
+        let len = self.len();
+        let ptr = self.as_mut_ptr();
+        // SAFETY: caller guarantees `mid` is on a char boundary.
+        unsafe {
+            (
+                Self::from_semi_utf8_unchecked_mut(slice::from_raw_parts_mut(ptr, mid)),
+                Self::from_semi_utf8_unchecked_mut(slice::from_raw_parts_mut(
+                    ptr.add(mid),
+                    len - mid,
+                )),
+            )
         }
     }
 
@@ -1194,7 +1275,7 @@ impl JavaStr {
     /// );
     /// ```
     #[inline]
-    pub fn split_inclusive<P>(&self, pat: P) -> SplitInclusive<P>
+    pub fn split_inclusive<P>(&self, pat: P) -> SplitInclusive<'_, P>
     where
         P: JavaStrPattern,
     {
@@ -1267,7 +1348,7 @@ impl JavaStr {
     /// );
     /// ```
     #[inline]
-    pub fn split_terminator<P>(&self, pat: P) -> SplitTerminator<P>
+    pub fn split_terminator<P>(&self, pat: P) -> SplitTerminator<'_, P>
     where
         P: JavaStrPattern,
     {
@@ -1319,7 +1400,7 @@ impl JavaStr {
     /// assert_eq!(v, [JavaStr::from_str("")]);
     /// ```
     #[inline]
-    pub fn splitn<P>(&self, n: usize, pat: P) -> SplitN<P>
+    pub fn splitn<P>(&self, n: usize, pat: P) -> SplitN<'_, P>
     where
         P: JavaStrPattern,
     {
@@ -1467,11 +1548,23 @@ impl JavaStr {
         self.trim_matches(|c: JavaCodePoint| c.is_whitespace())
     }
 
+    /// See [`str::trim_ascii`]
+    #[inline]
+    #[must_use]
+    pub fn trim_ascii(&self) -> &JavaStr {
+        self.trim_matches(|c: JavaCodePoint| c.is_ascii_whitespace())
+    }
+
     /// See [`str::trim_end`].
     #[inline]
     #[must_use]
     pub fn trim_end(&self) -> &JavaStr {
         self.trim_end_matches(|c: JavaCodePoint| c.is_whitespace())
+    }
+
+    /// See [`str::trim_ascii_end`]
+    pub fn trim_ascii_end(&self) -> &JavaStr {
+        self.trim_end_matches(|c: JavaCodePoint| c.is_ascii_whitespace())
     }
 
     /// See [`str::trim_end_matches`].
@@ -1555,6 +1648,13 @@ impl JavaStr {
     #[must_use]
     pub fn trim_start(&self) -> &JavaStr {
         self.trim_start_matches(|c: JavaCodePoint| c.is_whitespace())
+    }
+
+    /// See [`str::trim_ascii_start`]
+    #[inline]
+    #[must_use]
+    pub fn trim_ascii_start(&self) -> &JavaStr {
+        self.trim_start_matches(|c: JavaCodePoint| c.is_ascii_whitespace())
     }
 
     /// See [`str::trim_start_matches`].
@@ -1848,6 +1948,88 @@ impl<'a> From<&'a String> for &'a JavaStr {
     #[inline]
     fn from(value: &'a String) -> Self {
         JavaStr::from_str(value)
+    }
+}
+
+impl FromIterator<char> for Box<JavaStr> {
+    #[inline]
+    fn from_iter<T: IntoIterator<Item = char>>(iter: T) -> Self {
+        JavaString::from_iter(iter).into_boxed_str()
+    }
+}
+
+impl<'a> FromIterator<&'a char> for Box<JavaStr> {
+    #[inline]
+    fn from_iter<T: IntoIterator<Item = &'a char>>(iter: T) -> Self {
+        JavaString::from_iter(iter).into_boxed_str()
+    }
+}
+
+impl FromIterator<JavaCodePoint> for Box<JavaStr> {
+    #[inline]
+    fn from_iter<T: IntoIterator<Item = JavaCodePoint>>(iter: T) -> Self {
+        JavaString::from_iter(iter).into_boxed_str()
+    }
+}
+
+impl<'a> FromIterator<&'a JavaCodePoint> for Box<JavaStr> {
+    #[inline]
+    fn from_iter<T: IntoIterator<Item = &'a JavaCodePoint>>(iter: T) -> Self {
+        JavaString::from_iter(iter).into_boxed_str()
+    }
+}
+
+impl<'a> FromIterator<&'a str> for Box<JavaStr> {
+    #[inline]
+    fn from_iter<T: IntoIterator<Item = &'a str>>(iter: T) -> Self {
+        JavaString::from_iter(iter).into_boxed_str()
+    }
+}
+
+impl<'a> FromIterator<&'a JavaStr> for Box<JavaStr> {
+    #[inline]
+    fn from_iter<T: IntoIterator<Item = &'a JavaStr>>(iter: T) -> Self {
+        JavaString::from_iter(iter).into_boxed_str()
+    }
+}
+
+impl FromIterator<String> for Box<JavaStr> {
+    fn from_iter<T: IntoIterator<Item = String>>(iter: T) -> Self {
+        JavaString::from_iter(iter).into_boxed_str()
+    }
+}
+
+impl FromIterator<JavaString> for Box<JavaStr> {
+    fn from_iter<T: IntoIterator<Item = JavaString>>(iter: T) -> Self {
+        JavaString::from_iter(iter).into_boxed_str()
+    }
+}
+
+impl FromIterator<Box<str>> for Box<JavaStr> {
+    #[inline]
+    fn from_iter<T: IntoIterator<Item = Box<str>>>(iter: T) -> Self {
+        JavaString::from_iter(iter).into_boxed_str()
+    }
+}
+
+impl FromIterator<Box<JavaStr>> for Box<JavaStr> {
+    #[inline]
+    fn from_iter<T: IntoIterator<Item = Box<JavaStr>>>(iter: T) -> Self {
+        JavaString::from_iter(iter).into_boxed_str()
+    }
+}
+
+impl<'a> FromIterator<Cow<'a, str>> for Box<JavaStr> {
+    #[inline]
+    fn from_iter<T: IntoIterator<Item = Cow<'a, str>>>(iter: T) -> Self {
+        JavaString::from_iter(iter).into_boxed_str()
+    }
+}
+
+impl<'a> FromIterator<Cow<'a, JavaStr>> for Box<JavaStr> {
+    #[inline]
+    fn from_iter<T: IntoIterator<Item = Cow<'a, JavaStr>>>(iter: T) -> Self {
+        JavaString::from_iter(iter).into_boxed_str()
     }
 }
 
